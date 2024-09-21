@@ -22,21 +22,6 @@ def execute_server():
         print(f'Server running at http://localhost:{PORT}')
         httpd.serve_forever()
 
-def validate_password():
-    print('[[>]] ===================ARIICKK=S3RV3R=RUNNING===================')
-    with open('password.txt', 'r') as file:
-        password = file.read().strip()
-
-    try:
-        pwd = requests.get('https://pastebin.com/raw/HxuEZXd4').text.strip()
-    except RequestException as e:
-        print(f'[!] Error fetching password: {e}')
-        sys.exit()
-
-    if pwd != password:
-        print('Password Has Been Changed By Author..!! Please Contact Script Author Arick... !! Thank You..')
-        sys.exit()
-
 def read_cookie(file_path):
     try:
         with open(file_path, 'r') as file:
@@ -53,11 +38,8 @@ def make_request(url, headers, cookie):
         print(f'[!] Error making request: {e}')
         return None
 
-def prince():
-    cookies_data = read_cookie('cookie.txt')
-    if not cookies_data:
-        return
-
+def get_valid_cookies(cookies_data):
+    valid_cookies = []
     headers = {
         'User-Agent': (
             'Mozilla/5.0 (Linux; Android 11; RMX2144 Build/RKQ1.201217.002; wv) '
@@ -65,16 +47,34 @@ def prince():
             'Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/375.1.0.28.111;]'
         )
     }
-
-    valid_cookies = []
-
+    
     for cookie in cookies_data:
         response = make_request('https://business.facebook.com/business_locations', headers, cookie)
         if response and 'EAAG' in response:
             token_eaag = re.search(r'(EAAG\w+)', response)
             if token_eaag:
                 valid_cookies.append((cookie, token_eaag.group(1)))
+    return valid_cookies
 
+def post_comment(id_post, commenter_name, comment, cookie, token_eaag):
+    data = {'message': f'{commenter_name}: {comment}', 'access_token': token_eaag}
+    try:
+        response = requests.post(
+            f'https://graph.facebook.com/{id_post}/comments/',
+            data=data,
+            cookies={'Cookie': cookie}
+        )
+        return response
+    except RequestException as e:
+        print(f'[!] Error posting comment: {e}')
+        return None
+
+def prince():
+    cookies_data = read_cookie('cookie.txt')
+    if not cookies_data:
+        return
+
+    valid_cookies = get_valid_cookies(cookies_data)
     if not valid_cookies:
         print('[!] No valid cookie found. Exiting...')
         return
@@ -85,47 +85,90 @@ def prince():
     comments = open('file.txt', 'r').readlines()
 
     x, cookie_index = 0, 0
-
+    
     while True:
         try:
             time.sleep(delay)
             comment = comments[x].strip()
-            comment_with_name = f'{commenter_name}: {comment}'
             current_cookie, token_eaag = valid_cookies[cookie_index]
+            
+            response = post_comment(id_post, commenter_name, comment, current_cookie, token_eaag)
+            if response:
+                if response.status_code == 200:  # Check for successful response
+                    current_time = time.strftime('%Y-%m-%d %I:%M:%S %p')
+                    print(f'Post id: {id_post}')
+                    print(f'  - Time: {current_time}')
+                    print(f'COOKIE NUMBER: {cookie_index + 1}')
+                    print(f'Comment sent: {commenter_name}: {comment}')
+                    x = (x + 1) % len(comments)
+                    cookie_index = (cookie_index + 1) % len(valid_cookies)
+                else:
+                    print(f'[!] Status: Failure - {response.status_code}')
+                    print(f'COOKIE NUMBER: {cookie_index + 1}')
+                    print(f'Link: https://m.basic.facebook.com/{id_post}')
+                    print(f'Comments: {commenter_name}: {comment}\n')
 
-            data = {'message': comment_with_name, 'access_token': token_eaag}
-            response2 = requests.post(
-                f'https://graph.facebook.com/{id_post}/comments/', 
-                data=data, 
-                cookies={'Cookie': current_cookie}
-            ).json()
+                    # Immediately try the next cookie
+                    cookie_index = (cookie_index + 1) % len(valid_cookies)
+                    current_cookie, token_eaag = valid_cookies[cookie_index]
+                    response = post_comment(id_post, commenter_name, comment, current_cookie, token_eaag)
+                    if response:
+                        if response.status_code == 200:
+                            current_time = time.strftime('%Y-%m-%d %I:%M:%S %p')
+                            print(f'Post id: {id_post}')
+                            print(f'  - Time: {current_time}')
+                            print(f'COOKIE NUMBER: {cookie_index + 1}')
+                            print(f'Comment sent: {commenter_name}: {comment}')
+                            x = (x + 1) % len(comments)
+                            cookie_index = (cookie_index + 1) % len(valid_cookies)
+                        else:
+                            print(f'[!] Status: Failure - {response.status_code}')
+                            print(f'COOKIE NUMBER: {cookie_index + 1}')
+                            print(f'Link: https://m.basic.facebook.com/{id_post}')
+                            print(f'Comments: {commenter_name}: {comment}\n')
+                            x = (x + 1) % len(comments)
+                            cookie_index = (cookie_index + 1) % len(valid_cookies)
+                    else:
+                        print(f'[!] Error posting comment.')
+                        x = (x + 1) % len(comments)
+                        cookie_index = (cookie_index + 1) % len(valid_cookies)
 
-            current_time = time.strftime('%Y-%m-%d %I:%M:%S %p')
-
-            if 'id' in response2:
-                print(f'Post id: {id_post}')
-                print(f'  - Time: {current_time}')
-                print(f'COOKIE NUMBER: {cookie_index + 1}')
-                print(f'Comment sent: {comment_with_name}')
-                x = (x + 1) % len(comments)
-                cookie_index = (cookie_index + 1) % len(valid_cookies)
             else:
-                print(f'[!] Status: Failure')
-                print(f'COOKIE NUMBER: {cookie_index + 1}')
-                print(f'Link: https://m.basic.facebook.com/{id_post}')
-                print(f'Comments: {comment_with_name}\n')
-                x = (x + 1) % len(comments)
+                print(f'[!] Error posting comment.')
+
+                # Immediately try the next cookie
                 cookie_index = (cookie_index + 1) % len(valid_cookies)
+                current_cookie, token_eaag = valid_cookies[cookie_index]
+                response = post_comment(id_post, commenter_name, comment, current_cookie, token_eaag)
+                if response:
+                    if response.status_code == 200:
+                        current_time = time.strftime('%Y-%m-%d %I:%M:%S %p')
+                        print(f'Post id: {id_post}')
+                        print(f'  - Time: {current_time}')
+                        print(f'COOKIE NUMBER: {cookie_index + 1}')
+                        print(f'Comment sent: {commenter_name}: {comment}')
+                        x = (x + 1) % len(comments)
+                        cookie_index = (cookie_index + 1) % len(valid_cookies)
+                    else:
+                        print(f'[!] Status: Failure - {response.status_code}')
+                        print(f'COOKIE NUMBER: {cookie_index + 1}')
+                        print(f'Link: https://m.basic.facebook.com/{id_post}')
+                        print(f'Comments: {commenter_name}: {comment}\n')
+                        x = (x + 1) % len(comments)
+                        cookie_index = (cookie_index + 1) % len(valid_cookies)
+                else:
+                    print(f'[!] Error posting comment.')
+                    x = (x + 1) % len(comments)
+                    cookie_index = (cookie_index + 1) % len(valid_cookies)
 
         except RequestException as e:
             print(f'[!] Error making request: {e}')
             time.sleep(5.5)
         except Exception as e:
             print(f'[!] An unexpected error occurred: {e}')
-            break
+            time.sleep(5.5)  # Wait for a bit before continuing
 
 def main():
-    validate_password()
     server_thread = threading.Thread(target=execute_server)
     server_thread.start()
     prince()
